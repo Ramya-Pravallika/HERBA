@@ -51,18 +51,52 @@ st.markdown("""
     /* The "3D Card" Effect for Main Container */
     .block-container {
         background-color: var(--card-bg);
-        padding: 3rem 2rem !important;
         border-radius: 24px;
         box-shadow: 
             0 20px 40px var(--shadow-color),
-            0 0 0 1px rgba(255,255,255,0.5) inset; /* Inner highlight */
-        margin-top: 4rem;
-        max-width: 800px;
+            0 0 0 1px rgba(255,255,255,0.5) inset;
+        margin-top: 2rem;
+        padding: 2rem !important;
         border: 1px solid rgba(255,255,255,0.6);
+        max-width: 800px;
+        width: 95%; /* Responsive width */
     }
     
+    /* Mobile Optimization */
+    @media (max-width: 600px) {
+        .block-container {
+            padding: 1rem !important;
+            margin-top: 1rem;
+            border-radius: 16px;
+        }
+        
+        .herba-logo { font-size: 3rem; }
+        .header-title { font-size: 2rem; }
+        
+        .stTextInput input {
+            padding: 12px 15px !important;
+        }
+    }
+
+    /* Force input area background to ensure visibility */
+    .stChatInputContainer {
+        padding-bottom: 2rem;
+    }
+    
+    [data-testid="stChatInput"] {
+        background-color: transparent !important;
+    }
+    
+    /* Force Input text color */
+    textarea[data-testid="stChatInputTextArea"] {
+        background-color: white !important;
+        color: var(--text-main) !important;
+        border-radius: 24px !important;
+        border: 2px solid #E0E0E0 !important;
+    }
+
     /* Ensure text visibility in Dark Mode by forcing colors inside the card */
-    .stMarkdown, .stText, h1, h2, h3, p, label {
+    .stMarkdown, .stText, h1, h2, h3, p, label, .stChatMessage {
         color: var(--text-main) !important;
     }
 

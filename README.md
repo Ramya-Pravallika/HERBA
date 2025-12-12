@@ -14,8 +14,9 @@
 
 ## Architecture
 
-- **Backend**: FastAPI with async support
-- **Frontend**: Streamlit with custom CSS
+- **Backend**: FastAPI with async support (Port 8001)
+- **Frontend**: Streamlit with responsive 3D UI (Port 8501)
+- **Database**: SQLite (`remedies.db`) for managing remedy content
 - **LLM**: Google Gemini 2.0 Flash
 - **Session Management**: In-memory (extensible to Redis)
 
@@ -128,14 +129,6 @@ HERBA/
 ⚠️ **Medical Disclaimer**: Herba is not a medical professional and does not provide medical diagnoses. This is general health information and not a substitute for professional medical advice. If you have health concerns, please consult a qualified healthcare provider.
 
 🔒 **Privacy**: Conversations are session-based and not stored permanently. No personal health information is logged in plain text.
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please ensure all safety features remain intact and test thoroughly.
 
 ## Support
 
