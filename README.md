@@ -129,13 +129,6 @@ HERBA/
 
 🔒 **Privacy**: Conversations are session-based and not stored permanently. No personal health information is logged in plain text.
 
-## License
-
-MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please ensure all safety features remain intact and test thoroughly.
 
 ## Support
 
