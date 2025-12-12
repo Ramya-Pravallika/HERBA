@@ -130,9 +130,6 @@ HERBA/
 
 🔒 **Privacy**: Conversations are session-based and not stored permanently. No personal health information is logged in plain text.
 
-<<<<<<< HEAD
-=======
-
 >>>>>>> 9e27b38e7025cab87b0a56e60be1247c72877484
 ## Support
 
