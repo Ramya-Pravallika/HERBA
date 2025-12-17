@@ -21,6 +21,7 @@ class UserContext:
     symptoms: Dict[str, any] = field(default_factory=dict)
     symptoms_described: bool = False
     safety_confirmed: bool = False
+    last_bot_question: Optional[str] = None
 
 
 class RedFlagDetector:
@@ -82,6 +83,7 @@ class RemedyTriggerDetector:
         r'\bremedies?\s+(for|to|that)\b',
         r'\bhelp\s+me\s+with.*remedies?\b',
         r'\bnatural\s+(cure|treatment|remedy)\b',
+        r'\b(how|what).*cure\b',
     ]
     
     @classmethod
@@ -125,43 +127,76 @@ class HerbaCore:
         if is_red_flag:
             return self._handle_red_flag(red_flag_type)
         
-        # Check if user is requesting remedies
-        is_remedy_request = RemedyTriggerDetector.is_remedy_request(user_message)
-        
-        # Update context based on message
+        # Update context based on message (age, pregnancy, etc.)
         context = self._update_context(context, user_message)
         
-        # Determine response type
-        if is_remedy_request:
+        # Check if user is explicit requesting remedies
+        is_explicit_remedy_request = RemedyTriggerDetector.is_remedy_request(user_message)
+        
+        # 1. Logic Flow: Answer to "When did start?" -> Trigger
+        if context.last_bot_question == "When did these symptoms start?":
+             # We assume this is the answer
+             return self._trigger_remedy_flow(context)
+        
+        # 2. Logic Flow: Explicit Request
+        if is_explicit_remedy_request:
             if not context.symptoms_described:
+                 # If user says "give me remedies" but hasn't said "I have a cold"
                 return {
-                    'response': "I'd be happy to help! But first, could you tell me a bit more about what symptoms you're experiencing? This will help me suggest the most appropriate remedies.",
+                    'response': "I'd be happy to help! But first, could you tell me a bit more about what symptoms you're experiencing?",
                     'response_type': 'need_more_info',
                     'needs_confirmation': False
                 }
-            
-            # Check if we need safety confirmation
-            if not context.safety_confirmed:
-                return self._request_safety_confirmation(context)
-            
-            # Ready to provide remedies
-            return {
-                'response': '',  # Will be filled by LLM
-                'response_type': 'provide_remedies',
-                'needs_confirmation': False,
-                'context': self._serialize_context(context)
-            }
-        
-        # Not a remedy request - continue clarifying questions
-        if self._has_symptoms_in_message(user_message):
+            return self._trigger_remedy_flow(context)
+
+        # 3. Logic Flow: New Symptoms -> Ask "When started?"
+        has_new_symptoms = self._has_symptoms_in_message(user_message)
+        if has_new_symptoms:
             context.symptoms_described = True
-        
-        next_question = self._get_next_clarifying_question(context, user_message)
-        
+            question = "When did these symptoms start?"
+            context.last_bot_question = question
+            return {
+                'response': question,
+                'response_type': 'clarifying_question',
+                'needs_confirmation': False
+            }
+
+        # 4. Logic Flow: Greetings
+        if not context.symptoms_described:
+            greetings = ['hi', 'hello', 'hey', 'greetings', 'morning', 'afternoon', 'evening']
+            # If greeting OR very short message likely just saying hi
+            if any(g in user_message.lower() for g in greetings) or len(user_message.split()) < 3:
+                return {
+                     'response': "Hi! I'm Herba, your health companion. 💚 I'm here to help you with natural home remedies. How are you feeling today?",
+                     'response_type': 'greeting',
+                     'needs_confirmation': False
+                }
+
+        # 5. Fallback
+        # If we have symptoms but stuck in loop, just give remedies
+        if context.symptoms_described:
+              return self._trigger_remedy_flow(context)
+
         return {
-            'response': next_question,
-            'response_type': 'clarifying_question',
+            'response': '',
+            'response_type': 'conversation',
             'needs_confirmation': False
+        }
+
+    def _trigger_remedy_flow(self, context: UserContext) -> Dict:
+        """Helper to manage the flow to remedies with safety checks"""
+        
+        # Check if we need safety confirmation
+        if not context.safety_confirmed:
+            return self._request_safety_confirmation(context)
+        
+        # Ready to provide remedies
+        context.last_bot_question = None # Reset
+        return {
+            'response': '',  # Will be filled by LLM
+            'response_type': 'provide_remedies',
+            'needs_confirmation': False,
+            'context': self._serialize_context(context)
         }
     
     def _handle_red_flag(self, red_flag_type: str) -> Dict:
@@ -202,6 +237,7 @@ Stay safe, and I hope you get the care you need quickly. 💚"""
             response = "Before I suggest remedies, I need to know a few things to ensure they're safe for you:\n\n"
             response += "\n".join(f"• {q}" for q in questions)
             
+            context.last_bot_question = "safety_check"
             return {
                 'response': response,
                 'response_type': 'safety_check',
@@ -209,12 +245,7 @@ Stay safe, and I hope you get the care you need quickly. 💚"""
             }
         
         context.safety_confirmed = True
-        return {
-            'response': '',
-            'response_type': 'provide_remedies',
-            'needs_confirmation': False,
-            'context': self._serialize_context(context)
-        }
+        return self._trigger_remedy_flow(context)
     
     def _update_context(self, context: UserContext, message: str) -> UserContext:
         """Extract information from user message and update context"""
@@ -223,9 +254,12 @@ Stay safe, and I hope you get the care you need quickly. 💚"""
         # Extract age
         age_match = re.search(r'\b(\d{1,3})\s*(years?|yrs?|y\.?o\.?)?\s*(old)?\b', message_lower)
         if age_match:
-            age = int(age_match.group(1))
-            if 0 < age < 120:
-                context.age = age
+            try:
+                age = int(age_match.group(1))
+                if 0 < age < 120:
+                    context.age = age
+            except ValueError:
+                pass
         
         # Check pregnancy/breastfeeding
         if re.search(r'\b(not pregnant|no.*pregnant|not.*expecting)\b', message_lower):
@@ -242,9 +276,8 @@ Stay safe, and I hope you get the care you need quickly. 💚"""
         if re.search(r'\b(no allergies|no allergy|not allergic)\b', message_lower):
             context.allergies = []
         elif 'allerg' in message_lower:
-            # Simple extraction - could be improved
             common_allergens = ['peanut', 'nut', 'dairy', 'lactose', 'gluten', 'honey', 
-                              'pollen', 'dust', 'penicillin', 'aspirin']
+                              'pollen', 'dust', 'penicillin', 'aspirin', 'sulfa', 'latex']
             for allergen in common_allergens:
                 if allergen in message_lower:
                     if allergen not in context.allergies:
@@ -257,29 +290,12 @@ Stay safe, and I hope you get the care you need quickly. 💚"""
         symptom_keywords = [
             'pain', 'ache', 'hurt', 'sore', 'fever', 'cold', 'cough', 'headache',
             'nausea', 'dizzy', 'tired', 'fatigue', 'congestion', 'runny nose',
-            'stomach', 'throat', 'sick', 'ill', 'unwell', 'symptom'
+            'stomach', 'throat', 'sick', 'ill', 'unwell', 'symptom', 'vomit',
+            'burn', 'cut', 'bleed', 'rash', 'itch', 'swoll'
         ]
         
         message_lower = message.lower()
         return any(keyword in message_lower for keyword in symptom_keywords)
-    
-    def _get_next_clarifying_question(self, context: UserContext, last_message: str) -> str:
-        """Generate appropriate clarifying question based on context"""
-        
-        if not context.symptoms_described:
-            return "Hi! I'm Herba, your health companion. 💚 How are you feeling today? Tell me what's bothering you."
-        
-        # Ask about symptom details
-        questions = [
-            "When did these symptoms start?",
-            "On a scale of 1-10, how would you rate the severity?",
-            "Have you noticed anything that makes it better or worse?",
-            "Are you experiencing any other symptoms along with this?",
-            "Have you tried anything for this yet?",
-        ]
-        
-        # Simple rotation - could be made smarter
-        return questions[0]
     
     def _serialize_context(self, context: UserContext) -> Dict:
         """Convert context to dictionary for API response"""
